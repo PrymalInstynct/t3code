@@ -142,6 +142,51 @@ describe("Antigravity process environment", () => {
     expect(business.GOOGLE_API_KEY).toBeUndefined();
   });
 
+  it("passes the configured gateway and drops ambient gateway credentials", () => {
+    const baseEnv = {
+      PATH: "/usr/bin",
+      AGY_ACP_ENABLE_GATEWAY_AUTH: "1",
+      AGY_LLM_GATEWAY_URL: "https://ambient.example.com",
+      AGY_LLM_GATEWAY_API_KEY: "ambient-key",
+      AGY_GATEWAY_URL: "https://legacy.example.com",
+      AGY_GATEWAY_API_KEY: "legacy-key",
+      AGY_LLM_GATEWAY_MODELS: "gemini-pro",
+    };
+    const spawnFor = (auth: AntigravityAuthConfig) =>
+      buildAntigravityAcpSpawnInput({
+        installation: { executablePath: "/release/acp", harnessPath: "/release/harness" },
+        profile,
+        cwd: "/project",
+        baseEnv,
+        auth,
+      }).env ?? {};
+    const gateway = {
+      authMethod: "gateway",
+      apiKey: "gateway-secret",
+      gcpProject: "",
+      gcpLocation: "",
+      gatewayUrl: "https://gateway.example.com",
+    } as const;
+
+    const withKey = spawnFor(gateway);
+    expect(withKey.AGY_ACP_ENABLE_GATEWAY_AUTH).toBe("1");
+    expect(withKey.AGY_LLM_GATEWAY_URL).toBe("https://gateway.example.com");
+    expect(withKey.AGY_LLM_GATEWAY_API_KEY).toBe("gateway-secret");
+    expect(withKey.AGY_GATEWAY_URL).toBeUndefined();
+    expect(withKey.AGY_GATEWAY_API_KEY).toBeUndefined();
+    expect(withKey.AGY_LLM_GATEWAY_MODELS).toBe("gemini-pro");
+    expect(withKey.GEMINI_API_KEY).toBeUndefined();
+
+    const withoutKey = spawnFor({ ...gateway, apiKey: "" });
+    expect(withoutKey.AGY_LLM_GATEWAY_URL).toBe("https://gateway.example.com");
+    expect(withoutKey.AGY_LLM_GATEWAY_API_KEY).toBeUndefined();
+
+    const otherMethod = spawnFor({ ...gateway, authMethod: "oauth-personal" });
+    expect(otherMethod.AGY_ACP_ENABLE_GATEWAY_AUTH).toBeUndefined();
+    expect(otherMethod.AGY_LLM_GATEWAY_URL).toBeUndefined();
+    expect(otherMethod.AGY_LLM_GATEWAY_API_KEY).toBeUndefined();
+  });
+
   it("isolates TEMP and TMP to the profile directory on Windows", () => {
     const windowsProfile: AntigravityProfile = {
       platform: "win32",

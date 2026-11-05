@@ -72,6 +72,11 @@ const removedEnvironmentKeys = new Set([
   "AGY_ACP_ENABLE_OAUTH",
   "GEMINI_HOME",
   "AGY_ACP_FORCE_FILE_STORAGE",
+  "AGY_ACP_ENABLE_GATEWAY_AUTH",
+  "AGY_LLM_GATEWAY_URL",
+  "AGY_LLM_GATEWAY_API_KEY",
+  "AGY_GATEWAY_URL",
+  "AGY_GATEWAY_API_KEY",
   "ANTIGRAVITY_HARNESS_PATH",
   "BROWSER",
   "PYTHONUNBUFFERED",
@@ -93,6 +98,7 @@ export interface AntigravityAuthConfig {
   readonly apiKey: string;
   readonly gcpProject: string;
   readonly gcpLocation: string;
+  readonly gatewayUrl?: string;
 }
 
 const ANTIGRAVITY_PERSONAL_AUTH: AntigravityAuthConfig = {
@@ -116,6 +122,8 @@ export function antigravityAuthLabel(authMethod: AntigravityAuthMethod): string 
       return "Gemini API key";
     case "agent-platform":
       return "Agent Platform";
+    case "gateway":
+      return "AI API gateway";
   }
 }
 
@@ -133,6 +141,8 @@ export function antigravityAuthConfigIssue(auth: AntigravityAuthConfig): string 
       return auth.apiKey || (auth.gcpProject && auth.gcpLocation)
         ? null
         : "Agent Platform needs an API key, or a GCP project and location, in the Antigravity provider settings.";
+    case "gateway":
+      return auth.gatewayUrl ? null : "Enter a gateway URL in the Antigravity provider settings.";
   }
 }
 
@@ -208,7 +218,14 @@ function antigravityEnvironment(
       ? { GEMINI_API_KEY: auth.apiKey }
       : auth.authMethod === "agent-platform" && auth.apiKey
         ? { GOOGLE_API_KEY: auth.apiKey }
-        : {};
+        : auth.authMethod === "gateway" && auth.gatewayUrl
+          ? {
+              // Google's rollout gate; the method is offered only when this is set.
+              AGY_ACP_ENABLE_GATEWAY_AUTH: "1",
+              AGY_LLM_GATEWAY_URL: auth.gatewayUrl,
+              ...(auth.apiKey ? { AGY_LLM_GATEWAY_API_KEY: auth.apiKey } : {}),
+            }
+          : {};
   // Each launch unpacks about 1 GB; use T3-owned temp so the driver can reclaim files after force-kill.
   const tempDirectory = runtimeTempDirectory ?? profile.tempDirectory;
   return {
